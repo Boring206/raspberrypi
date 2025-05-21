@@ -110,39 +110,64 @@
 - SPI OLED/LCD 小螢幕 (推薦 SSD1306 或類似型號)
 - XBOX 控制器 (USB 連接)
 - 4x4 矩陣鍵盤
-- 蜂鳴器模組
-- 麵包板和連接線
+- 蜂鳴器模組 (GPIO PWM 控制)
+- 麵包板和連接線 (杜邦線)
 
 ## 接線說明
 
+**重要**：在進行任何接線之前，請確保您的 Raspberry Pi 已經關機並拔除電源！
+
+**腳位衝突檢查**： 以下所有 GPIO 腳位分配已經過檢查，確保沒有重複使用。
+
 ### SPI 小螢幕接線
-| Raspberry Pi 腳位 | SPI 螢幕腳位 |
-|-----------------|------------|
-| 3.3V (Pin 1)    | VCC        |
-| GND (Pin 6)     | GND        |
-| GPIO 10 (MOSI)  | DATA       |
-| GPIO 11 (SCLK)  | CLK        |
-| GPIO 8 (CE0)    | CS         |
-| GPIO 24         | DC         |
-| GPIO 25         | RST        |
+
+| Raspberry Pi 腳位 (BCM 編號) | SPI 螢幕腳位 | 備註 |
+|---------------------------|------------|------|
+| 3.3V (實體 Pin 1 或 Pin 17) | VCC | 電源正極 |
+| GND (實體 Pin 6, 9, 14, 等) | GND | 電源負極 (接地) |
+| GPIO 10 (實體 Pin 19, MOSI) | DATA / MOSI | SPI Master Out Slave In (數據輸出到螢幕) |
+| GPIO 11 (實體 Pin 23, SCLK) | CLK / SCLK | SPI Serial Clock (時脈) |
+| GPIO 8 (實體 Pin 24, CE0) | CS / CE0 | SPI Chip Select (片選) |
+| GPIO 24 (實體 Pin 18) | DC | Data/Command (數據/命令選擇) |
+| GPIO 25 (實體 Pin 22) | RST / RESET | Reset (重置) |
+
+**註**：請再次確認您的 SPI 螢幕模組上的腳位名稱，VCC 通常接 Raspberry Pi 的 3.3V。
 
 ### 矩陣鍵盤接線
-| Raspberry Pi 腳位 | 鍵盤腳位 |
-|-----------------|---------|
-| GPIO 6          | ROW 1   |
-| GPIO 13         | ROW 2   |
-| GPIO 19         | ROW 3   |
-| GPIO 26         | ROW 4   |
-| GPIO 12         | COL 1   |
-| GPIO 16         | COL 2   |
-| GPIO 20         | COL 3   |
-| GPIO 21         | COL 4   |
+
+| Raspberry Pi 腳位 (BCM 編號) | 鍵盤腳位 | 備註 |
+|---------------------------|---------|------|
+| GPIO 6  (實體 Pin 31) | ROW 1 | 行 1 |
+| GPIO 13 (實體 Pin 33) | ROW 2 | 行 2 |
+| GPIO 19 (實體 Pin 35) | ROW 3 | 行 3 |
+| GPIO 26 (實體 Pin 37) | ROW 4 | 行 4 |
+| GPIO 12 (實體 Pin 32) | COL 1 | 列 1 |
+| GPIO 16 (實體 Pin 36) | COL 2 | 列 2 |
+| GPIO 20 (實體 Pin 38) | COL 3 | 列 3 |
+| GPIO 21 (實體 Pin 40) | COL 4 | 列 4 |
+
+**註**：矩陣鍵盤的接線順序很重要，請確保行列對應正確。
 
 ### 蜂鳴器接線
-| Raspberry Pi 腳位 | 蜂鳴器腳位 |
-|-----------------|---------|
-| GPIO 18         | 正極 (+) |
-| GND             | 負極 (-) |
+
+| Raspberry Pi 腳位 (BCM 編號) | 蜂鳴器腳位 | 備註 |
+|---------------------------|-----------|------|
+| GPIO 18 (實體 Pin 12) | 正極 (+) | 訊號輸入 (PWM 控制) |
+| GND (實體 Pin 6, 9, 14, 等) | 負極 (-) | 電源負極 (接地) |
+
+**註**：注意蜂鳴器的正負極。此專案使用 PWM 控制。
+
+### XBOX 控制器接線
+直接透過 USB 接口連接到 Raspberry Pi 的任一可用 USB Port。
+
+### HDMI 大螢幕接線
+使用 HDMI 線連接 Raspberry Pi 的 HDMI Port 到您的 HDMI 顯示器或電視。
+
+**一般接線建議**：
+- **麵包板**： 建議使用麵包板整理 GPIO 接線。
+- **杜邦線**： 使用合適長度的杜邦線。
+- **GPIO 圖參考**： 接線前，請務必參考您 Raspberry Pi 型號的 GPIO 引腳圖（可搜尋 "Raspberry Pi 3 GPIO pinout"）。
+- **仔細檢查**： 通電前務必再次檢查所有連接，特別是 VCC 和 GND。
 
 ## 軟體安裝
 
@@ -168,18 +193,24 @@ sudo apt install -y python3-pip python3-dev python3-pygame
 sudo pip3 install RPi.GPIO
 sudo pip3 install luma.core luma.oled
 
-# 安裝其他依賴
-sudo pip3 install evdev
+# 安裝其他依賴 (根據 requirements.txt)
+sudo pip3 install evdev Pillow
 ```
+
+**註**：根據 requirements.txt，Pillow 也是需要的。
 
 ### 下載遊戲程式
 ```bash
 # 創建遊戲目錄
 mkdir -p ~/gamebox
+cd ~/gamebox
 
 # 複製遊戲檔案到此目錄
-# [將 gamebox 目錄中的所有檔案複製到 Raspberry Pi]
+# 例如：git clone <您的專案git儲存庫URL> .
+# 或者手動複製所有專案檔案（包含 main.py, games資料夾, screen_menu.py 等）到 ~/gamebox
 ```
+
+**提示**：建議將您的專案放在 Git 儲存庫中，方便下載和版本控制。
 
 ## 運行遊戲
 ```bash
@@ -187,12 +218,14 @@ cd ~/gamebox
 sudo python3 main.py
 ```
 
+**註**：由於需要直接控制 GPIO，可能需要 sudo 權限。
+
 ## 疑難排解
 
 ### SPI 螢幕問題
 - 確保 SPI 接口已啟用
 - 檢查接線是否正確
-- 若螢幕無顯示，可嘗試修改 screen_menu.py 中的設備類型
+- 若螢幕無顯示，可嘗試修改 screen_menu.py 中的設備類型 (例如 ssd1306, sh1106 等)
 - 執行以下命令確認 SPI 啟用狀態：
   ```bash
   lsmod | grep spi
@@ -200,16 +233,16 @@ sudo python3 main.py
 
 ### 控制器問題
 - 執行 `lsusb` 確認控制器已連接
-- 測試控制器：`python3 gamepad_input.py`
+- 測試控制器：`sudo python3 gamepad_input.py` (如果 gamepad_input.py 在主目錄)
 - 若無法識別，重新插拔控制器或嘗試不同 USB 接口
-- 檢查控制器是否需要驅動：
+- 檢查控制器是否需要驅動 (XBOX 控制器通常 Raspberry Pi OS 自帶驅動，但若有問題可嘗試 xboxdrv)：
   ```bash
   sudo apt install xboxdrv
   ```
 
 ### 鍵盤問題
 - 檢查接線
-- 執行 `python3 matrix_keypad.py` 測試
+- 執行 `sudo python3 matrix_keypad.py` 測試 (如果 matrix_keypad.py 在主目錄)
 - 檢查各針腳是否正確連接，可使用萬用表測試連通性
 
 ### 遊戲效能問題
@@ -225,66 +258,40 @@ sudo python3 main.py
 ```
 +---------------------+
 |  Raspberry Pi 3     |
+|       (BCM GPIO)    |
 |                     |
 |  +-------------+    |    +------------------+
-|  | GPIO Header |----|--->| 矩陣鍵盤 (4x4)    |
-|  +-------------+    |    +------------------+
-|                     |
+|  | GPIO 6,13,19,26 |----|--> ROW 1-4        |
+|  | GPIO 12,16,20,21|----|--> COL 1-4        |
+|  +-------------+    |    | 矩陣鍵盤 (4x4)    |
 |                     |    +------------------+
+|  +-------------+    |
+|  | GPIO 10(MOSI)   |----|--> DATA/MOSI      |
+|  | GPIO 11(SCLK)   |----|--> CLK/SCLK       |
+|  | GPIO 8 (CE0)    |----|--> CS             |
+|  | GPIO 24         |----|--> DC             |
+|  | GPIO 25         |----|--> RST            |
+|  | 3.3V, GND       |----|--> VCC, GND       |
 |  +-------------+    |    | SPI 小螢幕        |
-|  | SPI         |----|--->| (SSD1306)        |
-|  +-------------+    |    +------------------+
-|                     |
+|                     |    | (SSD1306)        |
 |                     |    +------------------+
+|  +-------------+    |
+|  | GPIO 18         |----|--> 正極 (+)        |
+|  | GND             |----|--> 負極 (-)        |
 |  +-------------+    |    | 蜂鳴器            |
-|  | GPIO 18     |----|--->| (PWM控制)         |
+|                     |    | (PWM控制)         |
+|                     |    +------------------+
+|  +-------------+    |
+|  | USB Port    |----|-----> XBOX 控制器       |
 |  +-------------+    |    +------------------+
 |                     |
-|  +-------------+    |    +------------------+
-|  | USB Port    |----|--->| Xbox 控制器       |
-|  +-------------+    |    +------------------+
-|                     |
-|  +-------------+    |    +------------------+
-|  | HDMI Port   |----|--->| 大螢幕 (顯示器)    |
+|  +-------------+    |
+|  | HDMI Port   |----|-----> 大螢幕 (顯示器)    |
 |  +-------------+    |    +------------------+
 +---------------------+
 ```
 
-## 自定義遊戲
-
-要添加新的遊戲，請遵循以下步驟：
-
-1. 在 `games` 資料夾中建立新的遊戲檔案 (例如 `game10.py`)
-2. 實現遊戲類，參考現有遊戲的結構：
-   ```python
-   class YourNewGame:
-       def __init__(self, width=800, height=600, buzzer=None):
-           # 初始化遊戲
-           
-       def reset_game(self):
-           # 重置遊戲狀態
-           
-       def update(self, controller_input=None):
-           # 更新遊戲邏輯
-           return {"game_over": False, "score": 0}
-           
-       def render(self, screen):
-           # 渲染遊戲畫面
-           
-       def cleanup(self):
-           # 清理資源
-   ```
-3. 在 `main.py` 中的 `self.games` 列表中添加新遊戲：
-   ```python
-   from games.game10 import YourNewGame
-   
-   # 在 GameConsole.__init__ 方法中：
-   self.games.append(
-       {"id": 10, "name": "你的遊戲", "description": "遊戲描述", "game_class": YourNewGame}
-   )
-   ```
-
-## 遊戲開發技巧
+**註**：此圖為簡化示意，實際接線請以上述表格和 Raspberry Pi GPIO 引腳圖為準。
 
 ### 共通模式
 所有遊戲遵循相同的基本結構，包含以下方法：
@@ -295,16 +302,20 @@ sudo python3 main.py
 - `cleanup`: 釋放遊戲資源
 
 ### 音效使用
-通過傳入的 buzzer 對象播放音效：
+通過傳入的 buzzer 對象播放音效 (參考 buzzer.py 中的 TONE_DEFINITIONS 和方法)：
 ```python
+# 假設 self.buzzer 是 BuzzerControl 的實例
 # 得分音效
-self.buzzer.play_tone("score")
+if self.buzzer:
+    self.buzzer.play_tone("score")
 
-# 遊戲結束音效
-self.buzzer.play_game_over_melody()
+# 遊戲結束旋律
+if self.buzzer:
+    self.buzzer.play_game_over_melody()
 
-# 遊戲升級音效
-self.buzzer.play_tone("level_up")
+# 升級/通關音效
+if self.buzzer:
+    self.buzzer.play_tone("level_up") # 或 play_win_melody()
 ```
 
 ### 常見遊戲元素
@@ -317,15 +328,15 @@ self.buzzer.play_tone("level_up")
 ## 許可證
 
 本項目為開源項目，依據 MIT 許可證發佈。
+(您可以在專案根目錄下添加一個 LICENSE 文件，內容為 MIT 許可證文本)
 
 ## 未來擴充
 
 - 添加更多遊戲
 - 支援多人遊戲模式
-- 添加高分記錄功能
+- 添加高分記錄功能 (可考慮保存到檔案)
 - 支援網絡遊戲功能
 - 添加配置界面，調整畫面大小和控制靈敏度
 - 支援更多控制器類型
-- 實現無線控制選項
-#   r a s p b e r r y p i  
- 
+- 實現無線控制選項 (例如藍牙控制器)
+

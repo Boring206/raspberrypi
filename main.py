@@ -134,6 +134,7 @@ class GameConsole:
     def handle_menu(self):
         """處理選單狀態的邏輯"""
         # 更新 SPI 螢幕顯示
+        self.spi_screen.display_menu(self.games, self.current_selection)
         key_pressed = self.keypad.get_key()
         if key_pressed is not None:
             if key_pressed.isdigit(): # 檢查按鍵是否為數字字元

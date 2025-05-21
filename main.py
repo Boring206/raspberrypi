@@ -35,7 +35,6 @@ FPS = 60  # 遊戲畫面更新頻率
 
 class GameConsole:
     """多功能遊戲機主控制類"""
-    
     def __init__(self):
         # 初始化硬體
         self.initialize_hardware()
@@ -135,16 +134,14 @@ class GameConsole:
     def handle_menu(self):
         """處理選單狀態的邏輯"""
         # 更新 SPI 螢幕顯示
-        self.spi_screen.display_menu(self.games, self.current_selection)
-        
-        # 檢查矩陣鍵盤輸入
         key_pressed = self.keypad.get_key()
         if key_pressed is not None:
-            if 1 <= key_pressed <= 9:
-                # 選擇遊戲
-                self.buzzer.play_tone("select")
-                self.current_selection = key_pressed - 1
-                self.state = "INSTRUCTION"
+            if key_pressed.isdigit(): # 檢查按鍵是否為數字字元
+                game_num = int(key_pressed)
+                if 1 <= game_num <= 9 and game_num <= len(self.games):
+                    self.buzzer.play_tone("select")
+                    self.current_selection = game_num - 1
+                    self.state = "INSTRUCTION"
         
         # 可選：使用 Xbox 控制器選擇遊戲
         controller_input = self.controller.get_input()

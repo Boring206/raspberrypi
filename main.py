@@ -37,9 +37,9 @@ HDMI_SCREEN_HEIGHT = 600
 FPS = 60
 
 # 新硬體的 GPIO (BCM 編號) - 確保與 traffic_light.py 和 power_button.py 一致
-TRAFFIC_LIGHT_RED_PIN = 22
-TRAFFIC_LIGHT_YELLOW_PIN = 23
-TRAFFIC_LIGHT_GREEN_PIN = 17
+TRAFFIC_LIGHT_RED_PIN = 4
+TRAFFIC_LIGHT_YELLOW_PIN = 3
+TRAFFIC_LIGHT_GREEN_PIN = 2
 # POWER_BUTTON_PIN 在 power_button.py 中定義
 
 class GameConsole:

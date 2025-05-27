@@ -88,7 +88,7 @@ sudo pip3 install -r requirements.txt
 * 綠燈 LED: GPIO 2
 
 ### 電源按鈕 (power_button.py):
-* 按鈕輸入: GPIO 4 (另一端接地，程式使用內部上拉電阻)
+* 按鈕輸入: GPIO 22 (另一端接地，程式使用內部上拉電阻)
 
 ### 重要接線提示：
 

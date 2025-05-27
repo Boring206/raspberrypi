@@ -8,7 +8,7 @@ import os
 import signal
 
 # BCM 腳位編號
-POWER_BUTTON_PIN = 4  # 假設按鈕接到 GPIO 4
+POWER_BUTTON_PIN = 22 # 假設按鈕接到 GPIO 22
 HOLD_DURATION = 3     # 長按多少秒觸發關機
 DEBOUNCE_TIME = 0.05  # 按鈕去彈跳時間 (秒)
 

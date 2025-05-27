@@ -8,7 +8,7 @@
 ### 多款遊戲： 內建 9 款經典及簡易遊戲。
 
 * 貪吃蛇
-* 打磚塊`~
+* 打磚塊`
 * 太空侵略者
 * 井字遊戲 (圈圈叉叉)
 * 記憶翻牌
@@ -83,9 +83,9 @@ sudo pip3 install -r requirements.txt
 * SPI_LED (Backlight Control / 背光控制): GPIO 27
 
 ### 交通號誌燈 LED (traffic_light.py, main.py):
-* 紅燈 LED: GPIO 22
-* 黃燈 LED: GPIO 23
-* 綠燈 LED: GPIO 17
+* 紅燈 LED: GPIO 4
+* 黃燈 LED: GPIO 3
+* 綠燈 LED: GPIO 2
 
 ### 電源按鈕 (power_button.py):
 * 按鈕輸入: GPIO 4 (另一端接地，程式使用內部上拉電阻)

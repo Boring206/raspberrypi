@@ -50,7 +50,7 @@ if __name__ == '__main__':
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
     # 假設紅燈接 GPIO 22, 黃燈接 GPIO 23, 綠燈接 GPIO 17
-    traffic_light = TrafficLight(red_pin=22, yellow_pin=23, green_pin=17)
+    traffic_light = TrafficLight(red_pin=4, yellow_pin=3, green_pin=2)
     try:
         print("交通信號燈測試...")
         print("紅燈亮")

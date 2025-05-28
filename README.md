@@ -78,9 +78,9 @@ sudo pip3 install -r requirements.txt
 * MOSI: GPIO 10 (實體引腳 Pin 19)
 * SCLK: GPIO 11 (實體引腳 Pin 23)
 * CS (Chip Select / 片選): GPIO 8 (實體引腳 Pin 24, CE0) - 對應 SPI_DEVICE = 0
-* SPI_DC (Data/Command / 資料/指令選擇): GPIO 25
-* SPI_RST (Reset / 重置): GPIO 24
-* SPI_LED (Backlight Control / 背光控制): GPIO 27
+* SPI_DC (Data/Command / 資料/指令選擇): GPIO 25(Pin 22)
+* SPI_RST (Reset / 重置): GPIO 24(Pin 18)
+* SPI_LED (Backlight Control / 背光控制): GPIO 27 (13)
 
 ### 交通號誌燈 LED (traffic_light.py, main.py):
 * 紅燈 LED: GPIO 4

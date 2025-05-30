@@ -44,6 +44,10 @@ class BrickBreakerGame:
         self.brick_cols = 10
         self.brick_gap = 2
         
+        # 音效計時
+        self.last_paddle_hit_time = 0
+        self.last_brick_hit_time = 0
+        
         # 初始化遊戲狀態
         self.reset_game()
     
@@ -69,24 +73,74 @@ class BrickBreakerGame:
         # 創建磚塊
         self.create_bricks()
     
-    def create_bricks(self):
-        """創建磚塊陣列"""
-        self.bricks = []
+    def handle_ball_paddle_collision(self):
+        """處理球與擋板碰撞，增強音效"""
+        current_time = time.time()
         
+        # 計算碰撞位置影響球的角度
+        hit_pos = (self.ball_x - self.paddle_x) / self.paddle_width
+        angle_influence = (hit_pos - 0.5) * 0.5  # -0.25 到 0.25
+        
+        self.ball_dy = -abs(self.ball_dy)  # 確保向上
+        self.ball_dx += angle_influence * self.ball_speed
+        
+        # 音效回饋
+        if self.buzzer and current_time - self.last_paddle_hit_time > 0.1:
+            # 根據擊球位置調整音調
+            base_freq = 400
+            freq_variation = int(hit_pos * 200)  # -100 to 100
+            self.buzzer.play_tone(frequency=base_freq + freq_variation, duration=0.1)
+            self.last_paddle_hit_time = current_time
+    
+    def handle_ball_brick_collision(self, brick_type):
+        """處理球與磚塊碰撞，增強音效和分數"""
+        current_time = time.time()
+        
+        # 根據磚塊類型給分
+        score_values = {
+            'red': 50,
+            'orange': 40,
+            'yellow': 30,
+            'green': 20,
+            'blue': 10
+        }
+        
+        self.score += score_values.get(brick_type, 10)
+        
+        # 音效回饋
+        if self.buzzer and current_time - self.last_brick_hit_time > 0.05:
+            freq_map = {
+                'red': 1000,
+                'orange': 900,
+                'yellow': 800,
+                'green': 700,
+                'blue': 600
+            }
+            frequency = freq_map.get(brick_type, 500)
+            self.buzzer.play_tone(frequency=frequency, duration=0.1)
+            self.last_brick_hit_time = current_time
+
+    def create_bricks(self):
+        """創建磚塊，增加顏色分層"""
+        self.bricks = []
         colors = [self.RED, self.ORANGE, self.YELLOW, self.GREEN, self.BLUE]
+        color_names = ['red', 'orange', 'yellow', 'green', 'blue']
         
         for row in range(self.brick_rows):
             for col in range(self.brick_cols):
-                # 計算磚塊位置
                 brick_x = col * (self.brick_width + self.brick_gap) + 50
                 brick_y = row * (self.brick_height + self.brick_gap) + 50
                 
-                # 建立磚塊 (位置、顏色、生命值)
-                self.bricks.append({
-                    'rect': pygame.Rect(brick_x, brick_y, self.brick_width, self.brick_height),
+                brick = {
+                    'x': brick_x,
+                    'y': brick_y,
+                    'width': self.brick_width,
+                    'height': self.brick_height,
                     'color': colors[row % len(colors)],
-                    'hits': row // 2 + 1  # 較上層的磚塊需要更多下才能破壞
-                })
+                    'type': color_names[row % len(color_names)],
+                    'active': True
+                }
+                self.bricks.append(brick)
     
     def update(self, controller_input=None):
         """

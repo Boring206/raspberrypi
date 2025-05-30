@@ -1,416 +1,675 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# screen_menu.py - SPI 螢幕控制邏輯
+# screen_menu.py - 2.8寸TFT SPI螢幕控制邏輯 (240x320)
 
 import time
+import os
 import RPi.GPIO as GPIO
 from luma.core.interface.serial import spi
 from luma.core.render import canvas
-# 根據您的螢幕型號 MSP2897，它可能使用 ILI9341 控制器
-# 因此，我們嘗試使用 luma.lcd.device 中的 ili9341 驅動
-# 如果不是 ILI9341，您需要查找 MSP2897 對應的 Luma 驅動或相容驅動
-from luma.lcd.device import ili9341 # 嘗試使用 ILI9341 驅動
-# from luma.oled.device import ssd1306, ssd1325, ssd1331, sh1106 # 保留OLED選項以供參考
+from luma.lcd.device import ili9341  # 2.8寸TFT通常使用ILI9341控制器
 from PIL import Image, ImageDraw, ImageFont
 
-# 定義 SPI 連接的 GPIO 引腳 (根據 README.md 更新)
-SPI_PORT = 0      # SPI0 (通常對應 MOSI: GPIO10, SCLK: GPIO11)
-SPI_DEVICE = 0    # SPI Chip Select (CE0 通常對應 CS: GPIO8)
+# 2.8寸TFT SPI螢幕設定 (240x320)
+SPI_PORT = 0      # SPI0
+SPI_DEVICE = 0    # CE0
+SPI_DC = 25       # Data/Command腳位
+SPI_RST = 24      # Reset腳位
+SPI_CS = 8        # Chip Select腳位
+SPI_LED = 27      # 背光控制腳位
 
-# 以下為需要明確指定的控制腳位 (BCM 編號)
-SPI_DC = 25       # Data/Command - 更新後的腳位
-SPI_RST = 24      # Reset - 更新後的腳位
-SPI_CS = 8        # Chip Select - (Luma 的 spi() 會處理，但這裡保留以明確)
-
-SPI_LED = 27      # 新增的 LED 背光控制腳位
-
-# 預設設定
-DEFAULT_FONT_SIZE = 16 # 對於較大螢幕，可以稍微增大字體
-# 2.8吋 MSP2897 SPI LCD Module 通常解析度為 240x320 或 320x240
-# 這裡假設為 240x320，如果方向不對，可以交換或使用 rotate 參數
-DISPLAY_WIDTH = 240   # TFT 顯示寬度 (請根據您的螢幕規格確認)
-DISPLAY_HEIGHT = 320  # TFT 顯示高度 (請根據您的螢幕規格確認)
-
+# 螢幕規格
+DISPLAY_WIDTH = 240   # TFT螢幕寬度
+DISPLAY_HEIGHT = 320  # TFT螢幕高度
+DEFAULT_FONT_SIZE = 18  # 適合240x320解析度的字體大小
 
 class SPIScreenManager:
-    """SPI 介面的小螢幕管理類"""
+    """2.8寸TFT SPI螢幕管理類 (240x320)"""
     
     def __init__(self, display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT):
         self.width = display_width
         self.height = display_height
         
-        # 將常數設為實例屬性，方便內部使用
+        # GPIO腳位設定
         self.SPI_DC = SPI_DC
         self.SPI_RST = SPI_RST
         self.SPI_CS_PIN = SPI_CS 
         self.SPI_LED = SPI_LED
-
+        
+        # 顏色定義
+        self.BLACK = "black"
+        self.WHITE = "white"
+        self.RED = "red"
+        self.GREEN = "green"
+        self.BLUE = "blue"
+        self.YELLOW = "yellow"
+        self.CYAN = "cyan"
+        self.MAGENTA = "magenta"
+        
+        # 初始化螢幕和字體
         self.device = self._initialize_device()
-        self.font = self._load_font()
+        self.font_small = None
+        self.font_medium = None
+        self.font_large = None
+        self._load_fonts()
     
     def _initialize_device(self):
-        """初始化 SPI 螢幕"""
+        """初始化2.8寸TFT SPI螢幕"""
         try:
-            # 設定 LED 背光腳位
-            # GPIO.setmode(GPIO.BCM) # 主程式 main.py 應已設定模式
+            # 設定背光控制腳位
             GPIO.setup(self.SPI_LED, GPIO.OUT)
-            GPIO.output(self.SPI_LED, GPIO.HIGH) # 開啟背光
-
-            serial = spi(port=SPI_PORT, device=SPI_DEVICE, gpio_DC=self.SPI_DC, gpio_RST=self.SPI_RST)
+            GPIO.output(self.SPI_LED, GPIO.HIGH)  # 開啟背光
             
-            # 初始化 TFT 設備
-            # **重要：您需要根據您的 TFT 螢幕控制器選擇正確的 Luma device**
-            # 嘗試使用 ili9341，如果您的螢幕是其他控制器，需要更改此處
-            # rotate 參數可以調整螢幕方向 (0, 1, 2, 3 對應 0, 90, 180, 270 度旋轉)
-            device = ili9341(serial, width=self.width, height=self.height, rotate=0) 
+            # 建立SPI連接
+            serial = spi(
+                port=SPI_PORT, 
+                device=SPI_DEVICE, 
+                gpio_DC=self.SPI_DC, 
+                gpio_RST=self.SPI_RST
+            )
             
-            print("SPI TFT 螢幕成功初始化 (嘗試使用 ili9341 驅動)")
+            # 初始化ILI9341控制器的TFT螢幕
+            device = ili9341(
+                serial, 
+                width=self.width, 
+                height=self.height, 
+                rotate=0  # 0:正常, 1:90度, 2:180度, 3:270度
+            )
+            
+            print(f"✓ 2.8寸TFT SPI螢幕初始化成功 ({self.width}x{self.height})")
+            print(f"  使用ILI9341控制器，背光腳位: GPIO {self.SPI_LED}")
+            
+            # 顯示初始化畫面
+            self._show_init_screen(device)
+            
             return device
             
+        except ImportError as e:
+            print(f"✗ 套件導入失敗: {e}")
+            print("請安裝必要套件: sudo pip3 install luma.lcd luma.core")
+            return None
         except Exception as e:
-            print(f"SPI TFT 螢幕初始化失敗: {e}")
-            print("請檢查：")
-            print("1. Luma.lcd 是否已安裝 (sudo pip3 install luma.lcd)")
-            print("2. 螢幕控制器是否為 ILI9341 或相容型號")
-            print("3. 接線是否正確，特別是 DC, RST, CS, LED 腳位")
-            print(f"4. DISPLAY_WIDTH ({self.width}) 和 DISPLAY_HEIGHT ({self.height}) 是否正確")
-            if hasattr(self, 'SPI_LED') and self.SPI_LED is not None: # 確保屬性存在
-                 GPIO.output(self.SPI_LED, GPIO.LOW) # 初始化失敗時關閉背光
+            print(f"✗ 2.8寸TFT SPI螢幕初始化失敗: {e}")
+            print("請檢查:")
+            print(f"  1. SPI接線是否正確 (DC:{self.SPI_DC}, RST:{self.SPI_RST}, LED:{self.SPI_LED})")
+            print("  2. SPI是否已啟用 (sudo raspi-config)")
+            print("  3. 螢幕是否為ILI9341控制器")
+            
+            # 初始化失敗時關閉背光
+            try:
+                GPIO.output(self.SPI_LED, GPIO.LOW)
+            except:
+                pass
             return None
     
-    def _load_font(self, font_path=None, font_size=DEFAULT_FONT_SIZE):
-        """載入字體，可指定字體檔案路徑或使用系統預設"""
+    def _show_init_screen(self, device):
+        """顯示初始化畫面"""
         try:
-            if font_path:
-                font = ImageFont.truetype(font_path, font_size)
-            else:
-                # 嘗試載入一個常見的 TTF 字體 (如果系統中有)
-                # 您可能需要安裝字體，例如：sudo apt-get install fonts-wqy-zenhei
+            with canvas(device) as draw:
+                # 黑色背景
+                draw.rectangle(device.bounding_box, outline=self.BLACK, fill=self.BLACK)
+                
+                # 顯示初始化訊息
+                init_text = "TFT 螢幕初始化"
+                spec_text = f"{self.width}x{self.height}"
+                
+                # 使用預設字體
+                font = ImageFont.load_default()
+                
+                # 計算文字位置
                 try:
-                    font = ImageFont.truetype("DejaVuSans.ttf", font_size)
-                except IOError:
-                    print("警告: DejaVuSans.ttf 未找到，使用 PIL 預設點陣字體。")
-                    font = ImageFont.load_default() # 可能較小且不支援中文
-            return font
+                    text_bbox = draw.textbbox((0, 0), init_text, font=font)
+                    text_w = text_bbox[2] - text_bbox[0]
+                    text_h = text_bbox[3] - text_bbox[1]
+                except AttributeError:
+                    text_w, text_h = draw.textsize(init_text, font=font)
+                
+                # 繪製文字
+                draw.text(
+                    ((self.width - text_w) // 2, self.height // 2 - text_h), 
+                    init_text, 
+                    fill=self.WHITE, 
+                    font=font
+                )
+                
+                try:
+                    spec_bbox = draw.textbbox((0, 0), spec_text, font=font)
+                    spec_w = spec_bbox[2] - spec_bbox[0]
+                except AttributeError:
+                    spec_w, _ = draw.textsize(spec_text, font=font)
+                
+                draw.text(
+                    ((self.width - spec_w) // 2, self.height // 2 + 5), 
+                    spec_text, 
+                    fill=self.GREEN, 
+                    font=font
+                )
+            
+            time.sleep(1)  # 顯示1秒
+            
         except Exception as e:
-            print(f"字體載入失敗: {e}")
-            try:
-                print("嘗試載入 PIL 預設點陣字體...")
-                return ImageFont.load_default()
-            except:
-                print("錯誤: 連 PIL 預設點陣字體都無法載入。")
-                return None 
+            print(f"初始化畫面顯示失敗: {e}")
     
-    def clear_screen(self):
-        """清除螢幕上的所有內容"""
-        if self.device:
+    def _load_fonts(self):
+        """載入中文字體，優先載入系統中文字體"""
+        try:
+            # 中文字體路徑列表（按優先順序）
+            chinese_font_paths = [
+                "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+                "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+                "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                "/usr/share/fonts/truetype/arphic/ukai.ttc",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            ]
+            
+            # 嘗試載入字體
+            font_loaded = False
+            for font_path in chinese_font_paths:
+                if os.path.exists(font_path):
+                    try:
+                        self.font_small = ImageFont.truetype(font_path, 14)
+                        self.font_medium = ImageFont.truetype(font_path, 18)
+                        self.font_large = ImageFont.truetype(font_path, 24)
+                        print(f"✓ 成功載入中文字體: {font_path}")
+                        font_loaded = True
+                        break
+                    except Exception as e:
+                        print(f"載入字體 {font_path} 失敗: {e}")
+                        continue
+            
+            if not font_loaded:
+                print("⚠️ 無法載入任何中文字體，使用預設字體")
+                self.font_small = ImageFont.load_default()
+                self.font_medium = ImageFont.load_default()
+                self.font_large = ImageFont.load_default()
+                
+        except Exception as e:
+            print(f"字體載入過程發生錯誤: {e}")
+            # 使用預設字體作為備援
+            self.font_small = ImageFont.load_default()
+            self.font_medium = ImageFont.load_default()
+            self.font_large = ImageFont.load_default()
+    
+    def clear_screen(self, color=None):
+        """清除螢幕"""
+        if not self.device:
+            return
+        
+        if color is None:
+            color = self.BLACK
+            
+        try:
             with canvas(self.device) as draw:
-                draw.rectangle(self.device.bounding_box, outline="black", fill="black")
+                draw.rectangle(self.device.bounding_box, outline=color, fill=color)
+        except Exception as e:
+            print(f"清除螢幕失敗: {e}")
     
     def display_menu(self, games, selected_index):
-        """
-        顯示遊戲選單
-        """
-        if not self.device or not self.font:
-            print("SPI 螢幕或字體未初始化，無法顯示選單")
+        """顯示遊戲選單，針對240x320解析度優化"""
+        if not self.device or not self.font_medium:
+            print("TFT螢幕或字體未初始化，無法顯示選單")
             return
         
-        with canvas(self.device) as draw:
-            draw.rectangle(self.device.bounding_box, outline="black", fill="black") 
-            title_text = "選擇遊戲:"
-            try:
-                # Pillow 9.1.0 之後 textsize 被移除，改用 textbbox
-                bbox = draw.textbbox((0,0), title_text, font=self.font)
-                title_w = bbox[2] - bbox[0]
-                title_h = bbox[3] - bbox[1]
-            except AttributeError: # 相容舊版 Pillow
-                title_w, title_h = draw.textsize(title_text, font=self.font)
-
-            draw.text(( (self.width - title_w) // 2 , 5), title_text, fill="white", font=self.font) # 稍微向下移動標題
-            
-            item_h_actual = title_h # 假設行高與標題同高
-            item_height = item_h_actual + 4 # 加一點間距
-
-            header_height = title_h + 10 # 標題區域高度
-            visible_area_height = self.height - header_height - 5 # 底部也留點空間
-            visible_count = max(1, visible_area_height // item_height) 
-            
-            start_idx = 0
-            if len(games) > visible_count:
-                start_idx = max(0, selected_index - (visible_count // 2))
-                start_idx = min(start_idx, len(games) - visible_count)
-
-            for i in range(visible_count):
-                actual_idx = start_idx + i
-                if actual_idx < len(games):
-                    y_pos = header_height + i * item_height
-                    prefix = "> " if actual_idx == selected_index else "  "
+        try:
+            with canvas(self.device) as draw:
+                # 黑色背景
+                draw.rectangle(self.device.bounding_box, outline=self.BLACK, fill=self.BLACK)
+                
+                # 標題
+                title_text = "🎮 遊戲選單"
+                self._draw_centered_text(draw, title_text, 10, self.font_large, self.CYAN)
+                
+                # 分隔線
+                draw.line([(10, 45), (self.width - 10, 45)], fill=self.WHITE, width=2)
+                
+                # 計算可顯示的遊戲項目數量
+                item_height = 30  # 每個項目的高度
+                available_height = self.height - 60 - 40  # 扣除標題和底部空間
+                visible_count = available_height // item_height
+                
+                # 計算滾動偏移
+                start_idx = 0
+                if len(games) > visible_count:
+                    start_idx = max(0, selected_index - (visible_count // 2))
+                    start_idx = min(start_idx, len(games) - visible_count)
+                
+                # 繪製遊戲項目
+                for i in range(visible_count):
+                    actual_idx = start_idx + i
+                    if actual_idx >= len(games):
+                        break
                     
-                    game_name = games[actual_idx]['name']
+                    y_pos = 55 + i * item_height
                     
-                    # 計算文字最大可用寬度
-                    prefix_id_text = f"{prefix}{games[actual_idx]['id']}. "
-                    try:
-                        prefix_id_bbox = draw.textbbox((0,0), prefix_id_text, font=self.font)
-                        prefix_id_w = prefix_id_bbox[2] - prefix_id_bbox[0]
-                        char_a_bbox = draw.textbbox((0,0), "A", font=self.font)
-                        char_a_w = char_a_bbox[2] - char_a_bbox[0]
-                    except AttributeError:
-                        prefix_id_w, _ = draw.textsize(prefix_id_text, font=self.font)
-                        char_a_w, _ = draw.textsize("A", font=self.font)
-
-                    if char_a_w > 0: # 避免除以零
-                        max_name_chars = (self.width - prefix_id_w - 10) // char_a_w # 左右各留5px
-                        if len(game_name) > max_name_chars and max_name_chars > 3:
-                             game_name = game_name[:max_name_chars-3] + "..."
+                    # 選中項目的背景
+                    if actual_idx == selected_index:
+                        draw.rectangle(
+                            [(5, y_pos - 2), (self.width - 5, y_pos + item_height - 8)],
+                            outline=self.BLUE,
+                            fill=self.BLUE
+                        )
+                        text_color = self.WHITE
+                        prefix = "▶ "
+                    else:
+                        text_color = self.WHITE
+                        prefix = "  "
                     
-                    text = f"{prefix}{games[actual_idx]['id']}. {game_name}"
-                    draw.text((5, y_pos), text, fill="white", font=self.font)
+                    # 遊戲文字
+                    game_text = f"{prefix}{games[actual_idx]['id']}. {games[actual_idx]['name']}"
+                    
+                    # 確保文字不會超出螢幕
+                    max_chars = 28  # 240寬度大約可容納28個字符
+                    if len(game_text) > max_chars:
+                        game_text = game_text[:max_chars-3] + "..."
+                    
+                    draw.text((10, y_pos), game_text, fill=text_color, font=self.font_medium)
+                
+                # 滾動指示器
+                if len(games) > visible_count:
+                    # 繪製滾動條
+                    scrollbar_height = available_height
+                    scrollbar_pos = (start_idx / (len(games) - visible_count)) * scrollbar_height
+                    
+                    draw.rectangle(
+                        [(self.width - 8, 55), (self.width - 5, 55 + scrollbar_height)],
+                        outline=self.WHITE,
+                        fill=self.BLACK
+                    )
+                    
+                    draw.rectangle(
+                        [(self.width - 8, 55 + int(scrollbar_pos)), 
+                         (self.width - 5, 55 + int(scrollbar_pos) + 20)],
+                        fill=self.YELLOW
+                    )
+                
+                # 底部提示
+                hint_text = "🎯 A:選擇 B:退出"
+                self._draw_centered_text(
+                    draw, hint_text, 
+                    self.height - 25, 
+                    self.font_small, 
+                    self.GREEN
+                )
+                
+        except Exception as e:
+            print(f"顯示選單失敗: {e}")
     
     def display_game_instructions(self, game):
-        """
-        顯示遊戲說明
-        """
-        if not self.device or not self.font:
-            print("SPI 螢幕或字體未初始化，無法顯示遊戲說明")
+        """顯示遊戲說明，針對240x320解析度優化"""
+        if not self.device or not self.font_medium:
+            print("TFT螢幕或字體未初始化，無法顯示遊戲說明")
             return
         
-        with canvas(self.device) as draw:
-            draw.rectangle(self.device.bounding_box, outline="black", fill="black")
-            game_name = game['name']
-            
-            try:
-                name_bbox = draw.textbbox((0,0), game_name, font=self.font)
-                name_w = name_bbox[2] - name_bbox[0]
-                name_h = name_bbox[3] - name_bbox[1]
-                char_bbox = draw.textbbox((0,0), "Test", font=self.font) # 用於獲取一般行高
-                line_h_actual = char_bbox[3] - char_bbox[1]
-            except AttributeError:
-                name_w, name_h = draw.textsize(game_name, font=self.font)
-                _, line_h_actual = draw.textsize("Test", font=self.font)
-
-            line_height_with_padding = line_h_actual + 4
-
-            draw.text(((self.width - name_w) // 2, 5), game_name, fill="white", font=self.font)
-
-            line_y_pos = 5 + name_h + 5 
-            draw.line([(5, line_y_pos), (self.width - 5, line_y_pos)], fill="white", width=1)
-            
-            instr_title_y = line_y_pos + 5
-            draw.text((5, instr_title_y), "操作說明:", fill="white", font=self.font)
-            
-            instr_text_y_start = instr_title_y + line_height_with_padding
-            
-            lines = self._wrap_text(game['description'], self.width - 10) 
-            for i, line in enumerate(lines):
-                draw.text((5, instr_text_y_start + i * line_height_with_padding), line, fill="white", font=self.font)
-            
-            bottom_text = "A:開始 B:返回"
-            try:
-                bottom_bbox = draw.textbbox((0,0), bottom_text, font=self.font)
-                bottom_text_w = bottom_bbox[2] - bottom_bbox[0]
-            except AttributeError:
-                bottom_text_w, _ = draw.textsize(bottom_text, font=self.font)
-
-            draw.text(((self.width - bottom_text_w) // 2, self.height - line_height_with_padding - 5), bottom_text, fill="white", font=self.font)
+        try:
+            with canvas(self.device) as draw:
+                # 黑色背景
+                draw.rectangle(self.device.bounding_box, outline=self.BLACK, fill=self.BLACK)
+                
+                # 遊戲名稱
+                game_name = game['name']
+                self._draw_centered_text(draw, game_name, 10, self.font_large, self.YELLOW)
+                
+                # 分隔線
+                draw.line([(10, 45), (self.width - 10, 45)], fill=self.WHITE, width=2)
+                
+                # 說明標題
+                draw.text((10, 55), "📋 操作說明:", fill=self.CYAN, font=self.font_medium)
+                
+                # 遊戲說明內容
+                description = game.get('description', '暫無說明')
+                wrapped_lines = self._wrap_text(description, self.width - 20, self.font_medium)
+                
+                y_pos = 85
+                for line in wrapped_lines:
+                    if y_pos > self.height - 80:  # 防止文字超出螢幕
+                        break
+                    draw.text((10, y_pos), line, fill=self.WHITE, font=self.font_medium)
+                    y_pos += 25
+                
+                # 控制說明
+                control_y = self.height - 70
+                draw.text((10, control_y), "🎮 控制說明:", fill=self.CYAN, font=self.font_medium)
+                
+                controls = [
+                    "搖桿：移動/選擇",
+                    "A鈕：確認/行動", 
+                    "B鈕：取消/暫停"
+                ]
+                
+                for i, control in enumerate(controls):
+                    draw.text((10, control_y + 25 + i * 20), f"• {control}", 
+                             fill=self.GREEN, font=self.font_small)
+                
+                # 底部提示
+                self._draw_centered_text(
+                    draw, "A:開始遊戲 B:返回選單", 
+                    self.height - 15, 
+                    self.font_small, 
+                    self.WHITE
+                )
+                
+        except Exception as e:
+            print(f"顯示遊戲說明失敗: {e}")
     
-    def display_game_over(self, score):
-        """
-        顯示遊戲結束畫面
-        """
-        if not self.device or not self.font:
-            print("SPI 螢幕或字體未初始化，無法顯示遊戲結束")
+    def display_game_over(self, score, high_score=None):
+        """顯示遊戲結束畫面"""
+        if not self.device:
             return
         
-        with canvas(self.device) as draw:
-            draw.rectangle(self.device.bounding_box, outline="black", fill="black") 
-            title_text = "遊戲結束"
-            score_text_str = f"分數: {score}"
-            bottom_text = "按任意鍵返回"
-
-            try:
-                title_bbox = draw.textbbox((0,0), title_text, font=self.font)
-                title_w, title_h = title_bbox[2]-title_bbox[0], title_bbox[3]-title_bbox[1]
-                score_bbox = draw.textbbox((0,0), score_text_str, font=self.font)
-                score_w, score_h = score_bbox[2]-score_bbox[0], score_bbox[3]-score_bbox[1]
-                bottom_bbox = draw.textbbox((0,0), bottom_text, font=self.font)
-                bottom_w, bottom_h = bottom_bbox[2]-bottom_bbox[0], bottom_bbox[3]-bottom_bbox[1]
-                line_h_actual = bottom_h # 用作一般行高
-            except AttributeError:
-                title_w, title_h = draw.textsize(title_text, font=self.font)
-                score_w, score_h = draw.textsize(score_text_str, font=self.font)
-                bottom_w, bottom_h = draw.textsize(bottom_text, font=self.font)
-                _, line_h_actual = draw.textsize("Test", font=self.font)
-
-            line_height_with_padding = line_h_actual + 4
-
-            draw.text(((self.width - title_w) // 2, self.height // 2 - title_h - score_h //2 - 5), title_text, fill="white", font=self.font)
-            draw.text(((self.width - score_w) // 2, self.height // 2 - score_h // 2), score_text_str, fill="white", font=self.font)
-            draw.text(((self.width - bottom_w)//2 , self.height - line_height_with_padding - 5), bottom_text, fill="white", font=self.font)
+        try:
+            with canvas(self.device) as draw:
+                # 黑色背景
+                draw.rectangle(self.device.bounding_box, outline=self.BLACK, fill=self.BLACK)
+                
+                # 遊戲結束標題
+                title_text = "🎯 遊戲結束"
+                self._draw_centered_text(draw, title_text, 50, self.font_large, self.RED)
+                
+                # 分數顯示
+                score_text = f"本次分數: {score}"
+                self._draw_centered_text(draw, score_text, 120, self.font_large, self.YELLOW)
+                
+                # 最高分數（如果有）
+                if high_score is not None:
+                    if score > high_score:
+                        record_text = "🏆 新紀錄！"
+                        record_color = self.GREEN
+                    else:
+                        record_text = f"最高分數: {high_score}"
+                        record_color = self.CYAN
+                    
+                    self._draw_centered_text(draw, record_text, 160, self.font_medium, record_color)
+                
+                # 評價
+                if score >= 1000:
+                    comment = "🌟 驚人表現！"
+                    comment_color = self.GREEN
+                elif score >= 500:
+                    comment = "⭐ 表現不錯！"
+                    comment_color = self.YELLOW
+                elif score >= 100:
+                    comment = "👍 繼續加油！"
+                    comment_color = self.CYAN
+                else:
+                    comment = "💪 再接再厲！"
+                    comment_color = self.WHITE
+                
+                self._draw_centered_text(draw, comment, 200, self.font_medium, comment_color)
+                
+                # 底部提示
+                hint_text = "按任意鍵返回選單"
+                self._draw_centered_text(draw, hint_text, self.height - 30, self.font_small, self.WHITE)
+                
+        except Exception as e:
+            print(f"顯示遊戲結束畫面失敗: {e}")
     
-    def _wrap_text(self, text, max_pixel_width):
-        """
-        將文字進行自動換行以適應指定的像素寬度
-        """
-        if not self.font: 
-            return [text]
-
-        lines = []
+    def display_custom_message(self, title, message, duration=0, title_color=None, message_color=None):
+        """顯示自定義訊息"""
+        if not self.device:
+            return
+        
+        if title_color is None:
+            title_color = self.CYAN
+        if message_color is None:
+            message_color = self.WHITE
+        
+        try:
+            with canvas(self.device) as draw:
+                # 黑色背景
+                draw.rectangle(self.device.bounding_box, outline=self.BLACK, fill=self.BLACK)
+                
+                # 標題
+                self._draw_centered_text(draw, title, 50, self.font_large, title_color)
+                
+                # 分隔線
+                draw.line([(20, 90), (self.width - 20, 90)], fill=self.WHITE, width=2)
+                
+                # 訊息內容
+                wrapped_lines = self._wrap_text(message, self.width - 20, self.font_medium)
+                
+                start_y = 110
+                total_height = len(wrapped_lines) * 25
+                current_y = start_y + (self.height - start_y - total_height) // 2
+                
+                for line in wrapped_lines:
+                    self._draw_centered_text(draw, line, current_y, self.font_medium, message_color)
+                    current_y += 25
+            
+            if duration > 0:
+                time.sleep(duration)
+                self.clear_screen()
+                
+        except Exception as e:
+            print(f"顯示自定義訊息失敗: {e}")
+    
+    def display_loading(self, message="載入中...", progress=None):
+        """顯示載入畫面"""
+        if not self.device:
+            return
+        
+        try:
+            with canvas(self.device) as draw:
+                # 黑色背景
+                draw.rectangle(self.device.bounding_box, outline=self.BLACK, fill=self.BLACK)
+                
+                # 載入訊息
+                self._draw_centered_text(draw, message, 100, self.font_large, self.CYAN)
+                
+                # 進度條（如果有進度值）
+                if progress is not None:
+                    bar_width = self.width - 40
+                    bar_height = 20
+                    bar_x = 20
+                    bar_y = 150
+                    
+                    # 進度條框架
+                    draw.rectangle(
+                        [(bar_x, bar_y), (bar_x + bar_width, bar_y + bar_height)],
+                        outline=self.WHITE,
+                        fill=self.BLACK
+                    )
+                    
+                    # 進度填充
+                    if progress > 0:
+                        fill_width = int(bar_width * progress / 100)
+                        draw.rectangle(
+                            [(bar_x + 2, bar_y + 2), (bar_x + fill_width - 2, bar_y + bar_height - 2)],
+                            fill=self.GREEN
+                        )
+                    
+                    # 進度百分比
+                    percent_text = f"{progress}%"
+                    self._draw_centered_text(draw, percent_text, bar_y + 30, self.font_medium, self.WHITE)
+                else:
+                    # 簡單的載入動畫點
+                    dots = "." * ((int(time.time() * 2) % 4))
+                    dots_text = f"載入中{dots}"
+                    self._draw_centered_text(draw, dots_text, 150, self.font_medium, self.WHITE)
+                
+        except Exception as e:
+            print(f"顯示載入畫面失敗: {e}")
+    
+    def _draw_centered_text(self, draw, text, y, font, color):
+        """繪製置中文字"""
+        try:
+            text_bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+        except AttributeError:
+            text_width, _ = draw.textsize(text, font=font)
+        
+        x = (self.width - text_width) // 2
+        draw.text((x, y), text, fill=color, font=font)
+    
+    def _wrap_text(self, text, max_width, font):
+        """自動換行文字"""
         if not text:
-            return lines
-
-        words = text.split(' ') # 按空格分割
+            return []
+        
+        lines = []
+        words = text.split(' ')
         current_line = ""
-
+        
         for word in words:
-            # 處理連續空格或空詞的情況
-            if not word:
-                if current_line and current_line[-1] != ' ': # 避免行尾多餘空格
-                    current_line += " "
-                continue
-
-            test_line = current_line + word if not current_line else current_line + " " + word
+            test_line = current_line + " " + word if current_line else word
             
             try:
-                bbox = self.font.getbbox(test_line)
+                bbox = font.getbbox(test_line)
                 line_width = bbox[2] - bbox[0]
-            except AttributeError: # 相容舊版 Pillow 的 getsize
-                # getsize 對多行文本返回 (width, height)，對單行返回 (width, height)
-                # 但對 load_default() 的字體，getsize 可能不準確或不存在
-                # 這裡假設 getsize 返回的是單行寬高
+            except AttributeError:
                 try:
-                    line_width, _ = self.font.getsize(test_line)
-                except: # 如果 getsize 也失敗，則無法換行
-                    lines.append(test_line) # 將剩餘部分作為一行
+                    line_width, _ = font.getsize(test_line)
+                except:
+                    lines.append(test_line)
                     current_line = ""
-                    break
-
-
-            if line_width <= max_pixel_width:
+                    continue
+            
+            if line_width <= max_width:
                 current_line = test_line
             else:
-                if current_line: # 如果當前行有內容，先將當前行加入
+                if current_line:
                     lines.append(current_line)
-                current_line = word # 新的一行從這個詞開始
-                # 檢查這個詞本身是否就超長
-                try:
-                    word_bbox = self.font.getbbox(current_line)
-                    word_width = word_bbox[2] - word_bbox[0]
-                except AttributeError:
-                    try:
-                        word_width, _ = self.font.getsize(current_line)
-                    except: # 無法獲取單詞寬度
-                        lines.append(current_line)
-                        current_line = ""
-                        continue
-                
-                if word_width > max_pixel_width:
-                    # 單詞本身超長，需要字符級換行 (這裡簡化，直接加入，可能溢出)
-                    # TODO: 實現字符級換行
-                    lines.append(current_line)
-                    current_line = ""
+                current_line = word
         
         if current_line:
             lines.append(current_line)
         
         return lines
     
-    def display_custom_message(self, title, message, duration=0):
-        """
-        顯示自定義訊息，可選擇持續一段時間後自動清除
-        """
-        if not self.device or not self.font:
-            print("SPI 螢幕或字體未初始化，無法顯示訊息")
-            return
-        
-        with canvas(self.device) as draw:
-            draw.rectangle(self.device.bounding_box, outline="black", fill="black") 
-            
-            try:
-                title_bbox = draw.textbbox((0,0), title, font=self.font)
-                title_w, title_h = title_bbox[2]-title_bbox[0], title_bbox[3]-title_bbox[1]
-                char_bbox = draw.textbbox((0,0), "Test", font=self.font)
-                line_h_actual = char_bbox[3]-char_bbox[1]
-            except AttributeError:
-                title_w, title_h = draw.textsize(title, font=self.font)
-                _, line_h_actual = draw.textsize("Test", font=self.font)
-
-            line_height_with_padding = line_h_actual + 4
-            
-            draw.text(((self.width - title_w) // 2, 5), title, fill="white", font=self.font)
-            
-            line_y_pos = 5 + title_h + 5
-            draw.line([(5, line_y_pos), (self.width - 5, line_y_pos)], fill="white", width=1)
-            
-            message_y_start = line_y_pos + 5
-            lines = self._wrap_text(message, self.width - 10)
-            for i, line in enumerate(lines):
-                draw.text((5, message_y_start + i * line_height_with_padding), line, fill="white", font=self.font)
-        
-        if duration > 0:
-            time.sleep(duration)
-            self.clear_screen() 
+    def set_brightness(self, brightness):
+        """設定螢幕亮度 (0-100)"""
+        try:
+            if 0 <= brightness <= 100:
+                # 使用PWM控制背光亮度
+                pwm = GPIO.PWM(self.SPI_LED, 1000)  # 1kHz頻率
+                pwm.start(brightness)
+                print(f"螢幕亮度設定為: {brightness}%")
+            else:
+                print("亮度值必須在0-100之間")
+        except Exception as e:
+            print(f"設定亮度失敗: {e}")
+    
+    def get_status(self):
+        """獲取螢幕狀態"""
+        return {
+            'width': self.width,
+            'height': self.height,
+            'device_ready': self.device is not None,
+            'font_loaded': self.font_medium is not None,
+            'backlight_pin': self.SPI_LED
+        }
     
     def cleanup(self):
         """清理資源"""
-        if self.device:
-            self.clear_screen()
-        if hasattr(self, 'SPI_LED') and self.SPI_LED is not None:
-             GPIO.output(self.SPI_LED, GPIO.LOW) 
-        print("SPI 螢幕已清理")
+        try:
+            if self.device:
+                self.clear_screen()
+                print("✓ TFT螢幕已清理")
+            
+            # 關閉背光
+            if hasattr(self, 'SPI_LED') and self.SPI_LED is not None:
+                GPIO.output(self.SPI_LED, GPIO.LOW)
+                print("✓ 背光已關閉")
+                
+        except Exception as e:
+            print(f"⚠️ 清理TFT螢幕時發生警告: {e}")
 
-# 測試代碼
-if __name__ == "__main__":
+
+# 測試程式
+def run_screen_test():
+    """執行螢幕測試"""
+    print("🖥️ 2.8寸TFT SPI螢幕測試程式")
+    print("=" * 50)
+    
     try:
-        GPIO.setmode(GPIO.BCM) 
+        # 設定GPIO模式
+        GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
-
-        # **請根據您的螢幕規格修改 DISPLAY_WIDTH 和 DISPLAY_HEIGHT**
-        screen = SPIScreenManager(display_width=DISPLAY_WIDTH, display_height=DISPLAY_HEIGHT)
-
+        
+        # 初始化螢幕
+        screen = SPIScreenManager()
+        
+        if not screen.device:
+            print("❌ 螢幕初始化失敗，測試終止")
+            return
+        
+        # 測試資料
         games_data = [
-            {"id": 1, "name": "貪吃蛇 (Snake)", "description": "搖桿控制方向。按A鈕加速。"},
-            {"id": 2, "name": "打磚塊 (Brick Breaker)", "description": "搖桿左右移動擋板。按A鈕發射球。"},
-            {"id": 3, "name": "太空侵略者 (Space Invaders)", "description": "搖桿左右移動。按A鈕射擊。"},
-            {"id": 4, "name": "井字遊戲 (Tic-Tac-Toe)", "description": "搖桿選擇格子。按A鈕確認。"},
-            {"id": 5, "name": "記憶翻牌 (Memory Match)", "description": "搖桿選擇牌。按A鈕翻牌。"},
-            {"id": 6, "name": "簡易迷宮 (Simple Maze)", "description": "搖桿控制方向。"},
-            {"id": 7, "name": "打地鼠 (Whac-A-Mole)", "description": "搖桿移動槌子。按A鈕敲擊。"},
-            {"id": 8, "name": "俄羅斯方塊 (Tetris-like)", "description": "搖桿左右移動，上改變方向，下加速。按A鈕快速落下。"},
-            {"id": 9, "name": "反應力測試 (Reaction Test)", "description": "出現信號時，按A鈕。"},
+            {"id": 1, "name": "貪吃蛇", "description": "使用搖桿控制蛇的移動方向，吃到食物會變長。按A鈕可以加速移動。"},
+            {"id": 2, "name": "打磚塊", "description": "使用搖桿左右移動擋板，按A鈕發射球。打破所有磚塊即可過關。"},
+            {"id": 3, "name": "太空侵略者", "description": "使用搖桿左右移動太空船，按A鈕發射子彈消滅入侵的外星人。"},
+            {"id": 4, "name": "井字遊戲", "description": "經典的圈圈叉叉遊戲。使用搖桿選擇格子，按A鈕確認下棋。"},
+            {"id": 5, "name": "記憶翻牌", "description": "翻開相同的牌配對。使用搖桿選擇牌，按A鈕翻牌。"},
+            {"id": 6, "name": "簡易迷宮", "description": "使用搖桿控制角色在迷宮中移動，找到出口即可過關。"},
+            {"id": 7, "name": "打地鼠", "description": "地鼠會隨機出現，使用搖桿移動槌子，按A鈕敲擊地鼠得分。"},
+            {"id": 8, "name": "俄羅斯方塊", "description": "經典方塊遊戲。搖桿左右移動，上改變方向，下加速。按A鈕快速落下。"},
+            {"id": 9, "name": "反應力測試", "description": "當螢幕出現信號時，盡快按A鈕。測試你的反應速度。"}
         ]
         
-        if screen.device: 
-            print("顯示選單...")
-            screen.display_menu(games_data, 0)
-            time.sleep(2)
-            
-            print("移動選擇...")
-            for i in range(1, len(games_data)):
-                screen.display_menu(games_data, i)
-                time.sleep(0.5) 
-            
-            print("顯示遊戲說明 (遊戲1)...")
-            screen.display_game_instructions(games_data[0])
-            time.sleep(2)
-            
-            print("顯示遊戲結束...")
-            screen.display_game_over(100)
-            time.sleep(2)
-
-            print("顯示自定義訊息...")
-            screen.display_custom_message("系統訊息", "正在載入資源，請稍候...", duration=3)
-            
-            screen.clear_screen()
-            print("測試完成，清理螢幕。")
-        else:
-            print("螢幕未成功初始化，跳過部分測試。")
-            
+        print("✅ 螢幕初始化成功，開始測試...")
+        
+        # 測試1: 顯示載入畫面       
+        print("📱 測試1: 載入畫面")
+        screen.display_loading("系統啟動中...")
+        time.sleep(2)
+        
+        # 測試2: 進度條載入
+        print("📱 測試2: 進度載入")
+        for progress in range(0, 101, 20):
+            screen.display_loading("載入遊戲資源...", progress)
+            time.sleep(0.5)
+        
+        # 測試3: 選單顯示
+        print("📱 測試3: 遊戲選單")
+        for i in range(len(games_data)):
+            screen.display_menu(games_data, i)
+            time.sleep(0.8)
+        
+        # 測試4: 遊戲說明
+        print("📱 測試4: 遊戲說明")
+        screen.display_game_instructions(games_data[0])
+        time.sleep(3)
+        
+        # 測試5: 遊戲結束畫面
+        print("📱 測試5: 遊戲結束")
+        screen.display_game_over(1250, 1000)
+        time.sleep(3)
+        
+        # 測試6: 自定義訊息
+        print("📱 測試6: 系統訊息")
+        screen.display_custom_message(
+            "系統通知", 
+            "遊戲機啟動完成！所有硬體模組運作正常。", 
+            duration=3
+        )
+        
+        # 測試7: 亮度測試
+        print("📱 測試7: 亮度調整")
+        for brightness in [100, 50, 20, 100]:
+            screen.set_brightness(brightness)
+            screen.display_custom_message("亮度測試", f"當前亮度: {brightness}%", duration=1)
+        
+        # 顯示測試完成
+        screen.display_custom_message(
+            "測試完成", 
+            "所有顯示功能測試通過！螢幕工作正常。",
+            duration=3
+        )
+        
+        print("✅ 所有測試完成")
+        
+        # 顯示狀態資訊
+        status = screen.get_status()
+        print(f"📊 螢幕狀態: {status}")
+        
+    except KeyboardInterrupt:
+        print("\n⚠️ 測試被使用者中斷")
     except Exception as e:
-        print(f"測試出錯: {e}")
+        print(f"❌ 測試過程中發生錯誤: {e}")
     finally:
-        if 'screen' in locals() and screen: 
+        if 'screen' in locals():
             screen.cleanup()
-        # GPIO.cleanup() # 應由主程式 main.py 負責最終的 GPIO 清理
-        print("screen_menu.py 測試結束。")
+        print("🧹 測試程式結束")
 
+
+if __name__ == "__main__":
+    run_screen_test()

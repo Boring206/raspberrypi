@@ -68,8 +68,6 @@ class TicTacToeGame:
         """進行遊戲回合"""
         # 如果該格子已被佔用，則不做任何事
         if self.board[y][x] != 0:
-            if self.buzzer:
-                self.buzzer.play_tone("error")
             return False
         
         # 放置棋子
@@ -77,19 +75,19 @@ class TicTacToeGame:
         
         # 播放音效
         if self.buzzer:
-            self.buzzer.play_tone("select")
+            self.buzzer.play_tone(frequency=600, duration=0.2)
         
         # 檢查遊戲是否結束
         if self.check_win():
             self.game_over = True
             self.winner = self.current_player
             if self.buzzer:
-                self.buzzer.play_win_melody()
+                self.buzzer.play_tone(frequency=1000, duration=0.5)
         elif self.check_draw():
             self.game_over = True
             self.winner = 0
             if self.buzzer:
-                self.buzzer.play_tone("game_over")
+                self.buzzer.play_tone(frequency=400, duration=0.8)
         else:
             # 切換玩家
             self.current_player = 2 if self.current_player == 1 else 1
@@ -102,12 +100,12 @@ class TicTacToeGame:
         
         # 檢查水平線
         for y in range(3):
-            if self.board[y][0] == player and self.board[y][1] == player and self.board[y][2] == player:
+            if all(self.board[y][x] == player for x in range(3)):
                 return True
         
         # 檢查垂直線
         for x in range(3):
-            if self.board[0][x] == player and self.board[1][x] == player and self.board[2][x] == player:
+            if all(self.board[y][x] == player for y in range(3)):
                 return True
         
         # 檢查對角線
@@ -130,11 +128,11 @@ class TicTacToeGame:
         """電腦玩家進行回合"""
         # 檢查是否該電腦行動
         if not self.vs_computer or self.current_player != 2:
-            return
+            return False
         
         current_time = time.time()
         if current_time - self.computer_last_move < self.computer_delay:
-            return
+            return False
         
         self.computer_last_move = current_time
         
@@ -142,26 +140,25 @@ class TicTacToeGame:
         for y in range(3):
             for x in range(3):
                 if self.board[y][x] == 0:
-                    self.board[y][x] = 2  # 測試移動
+                    self.board[y][x] = 2
                     if self.check_win_for_player(2):
-                        self.make_move(x, y)
-                        return
-                    self.board[y][x] = 0  # 復原
+                        self.board[y][x] = 0
+                        return self.make_move(x, y)
+                    self.board[y][x] = 0
         
         # 檢查是否需要阻擋對手
         for y in range(3):
             for x in range(3):
                 if self.board[y][x] == 0:
-                    self.board[y][x] = 1  # 測試對手移動
+                    self.board[y][x] = 1
                     if self.check_win_for_player(1):
-                        self.make_move(x, y)
-                        return
-                    self.board[y][x] = 0  # 復原
+                        self.board[y][x] = 0
+                        return self.make_move(x, y)
+                    self.board[y][x] = 0
         
         # 嘗試佔據中央
         if self.board[1][1] == 0:
-            self.make_move(1, 1)
-            return
+            return self.make_move(1, 1)
         
         # 隨機移動
         empty_cells = []
@@ -172,18 +169,20 @@ class TicTacToeGame:
         
         if empty_cells:
             x, y = random.choice(empty_cells)
-            self.make_move(x, y)
+            return self.make_move(x, y)
+        
+        return False
     
     def check_win_for_player(self, player):
         """檢查指定玩家是否獲勝"""
         # 檢查水平線
         for y in range(3):
-            if self.board[y][0] == player and self.board[y][1] == player and self.board[y][2] == player:
+            if all(self.board[y][x] == player for x in range(3)):
                 return True
         
         # 檢查垂直線
         for x in range(3):
-            if self.board[0][x] == player and self.board[1][x] == player and self.board[2][x] == player:
+            if all(self.board[y][x] == player for y in range(3)):
                 return True
         
         # 檢查對角線
@@ -195,87 +194,57 @@ class TicTacToeGame:
         return False
     
     def update(self, controller_input=None):
-        """
-        更新遊戲狀態
-        
-        參數:
-            controller_input: 來自控制器的輸入字典
-        
-        返回:
-            包含遊戲狀態的字典
-        """
+        """更新遊戲狀態"""
         if self.game_over or self.paused:
-            # 處理遊戲結束或暫停狀態下的輸入
             if controller_input and controller_input.get("start_pressed"):
                 if self.game_over:
                     self.reset_game()
                 else:
-                    self.paused = not self.paused
-            
-            return {"game_over": self.game_over, "winner": self.winner, "paused": self.paused}
+                    self.paused = False
+            return {"game_over": self.game_over, "winner": self.winner}
         
         # 處理電腦移動
         if self.vs_computer and self.current_player == 2:
             self.computer_move()
-            return {"game_over": self.game_over, "winner": self.winner}
         
         # 處理玩家輸入
         current_time = time.time()
         if current_time - self.last_input_time < self.input_delay:
-            # 輸入延遲中，不處理輸入
             return {"game_over": self.game_over, "winner": self.winner}
         
         if controller_input:
-            input_detected = False
+            moved = False
             
-            # 方向控制
-            if controller_input.get("up_pressed"):
-                self.cursor_y = max(0, self.cursor_y - 1)
-                input_detected = True
-            elif controller_input.get("down_pressed"):
-                self.cursor_y = min(2, self.cursor_y + 1)
-                input_detected = True
-            
-            if controller_input.get("left_pressed"):
-                self.cursor_x = max(0, self.cursor_x - 1)
-                input_detected = True
-            elif controller_input.get("right_pressed"):
-                self.cursor_x = min(2, self.cursor_x + 1)
-                input_detected = True
-            
-            # 選擇控制
-            if controller_input.get("a_pressed"):
-                self.make_move(self.cursor_x, self.cursor_y)
-                input_detected = True
-            
-            # 暫停控制
-            if controller_input.get("start_pressed"):
-                self.paused = not self.paused
-                input_detected = True
-            
-            # 輔助按鈕：切換對戰模式
-            if controller_input.get("y_pressed"):
+            if controller_input.get("up_pressed") and self.cursor_y > 0:
+                self.cursor_y -= 1
+                moved = True
+            elif controller_input.get("down_pressed") and self.cursor_y < 2:
+                self.cursor_y += 1
+                moved = True
+            elif controller_input.get("left_pressed") and self.cursor_x > 0:
+                self.cursor_x -= 1
+                moved = True
+            elif controller_input.get("right_pressed") and self.cursor_x < 2:
+                self.cursor_x += 1
+                moved = True
+            elif controller_input.get("a_pressed"):
+                if not self.vs_computer or self.current_player == 1:
+                    self.make_move(self.cursor_x, self.cursor_y)
+                moved = True
+            elif controller_input.get("y_pressed"):
                 self.vs_computer = not self.vs_computer
-                self.reset_game()
-                input_detected = True
-                if self.buzzer:
-                    self.buzzer.play_tone("navigate")
+                moved = True
+            elif controller_input.get("start_pressed"):
+                self.paused = True
+                moved = True
             
-            # 如果檢測到輸入，重置輸入延遲計時器
-            if input_detected:
+            if moved:
                 self.last_input_time = current_time
-                if self.buzzer and not controller_input.get("a_pressed"):
-                    self.buzzer.play_tone("navigate")
         
         return {"game_over": self.game_over, "winner": self.winner}
     
     def render(self, screen):
-        """
-        渲染遊戲畫面
-        
-        參數:
-            screen: pygame 螢幕物件
-        """
+        """渲染遊戲畫面"""
         # 清除螢幕
         screen.fill(self.BLACK)
         
@@ -286,83 +255,63 @@ class TicTacToeGame:
         # 繪製網格線
         for i in range(1, 3):
             # 垂直線
-            pygame.draw.line(
-                screen, 
-                self.BLACK, 
-                (self.board_x + i * self.grid_size, self.board_y), 
-                (self.board_x + i * self.grid_size, self.board_y + self.board_size), 
-                self.line_width
-            )
+            start_pos = (self.board_x + i * self.grid_size, self.board_y)
+            end_pos = (self.board_x + i * self.grid_size, self.board_y + self.board_size)
+            pygame.draw.line(screen, self.BLACK, start_pos, end_pos, self.line_width)
             
             # 水平線
-            pygame.draw.line(
-                screen, 
-                self.BLACK, 
-                (self.board_x, self.board_y + i * self.grid_size), 
-                (self.board_x + self.board_size, self.board_y + i * self.grid_size), 
-                self.line_width
-            )
+            start_pos = (self.board_x, self.board_y + i * self.grid_size)
+            end_pos = (self.board_x + self.board_size, self.board_y + i * self.grid_size)
+            pygame.draw.line(screen, self.BLACK, start_pos, end_pos, self.line_width)
         
         # 繪製棋子
         for y in range(3):
             for x in range(3):
-                cell_x = self.board_x + x * self.grid_size
-                cell_y = self.board_y + y * self.grid_size
-                cell_center = (cell_x + self.grid_size // 2, cell_y + self.grid_size // 2)
-                
-                if self.board[y][x] == 1:  # X
-                    # 繪製X
-                    margin = self.grid_size // 4
-                    pygame.draw.line(screen, self.BLUE, 
-                                     (cell_x + margin, cell_y + margin), 
-                                     (cell_x + self.grid_size - margin, cell_y + self.grid_size - margin), 
-                                     self.line_width)
-                    pygame.draw.line(screen, self.BLUE, 
-                                     (cell_x + self.grid_size - margin, cell_y + margin), 
-                                     (cell_x + margin, cell_y + self.grid_size - margin), 
-                                     self.line_width)
-                
-                elif self.board[y][x] == 2:  # O
-                    # 繪製O
-                    radius = self.grid_size // 2 - self.grid_size // 4
-                    pygame.draw.circle(screen, self.RED, cell_center, radius, self.line_width)
+                if self.board[y][x] != 0:
+                    center_x = self.board_x + x * self.grid_size + self.grid_size // 2
+                    center_y = self.board_y + y * self.grid_size + self.grid_size // 2
+                    
+                    if self.board[y][x] == 1:  # X
+                        size = self.grid_size // 3
+                        pygame.draw.line(screen, self.RED,
+                                       (center_x - size, center_y - size),
+                                       (center_x + size, center_y + size), 8)
+                        pygame.draw.line(screen, self.RED,
+                                       (center_x + size, center_y - size),
+                                       (center_x - size, center_y + size), 8)
+                    else:  # O
+                        radius = self.grid_size // 3
+                        pygame.draw.circle(screen, self.BLUE, (center_x, center_y), radius, 8)
         
-        # 繪製游標 (只在遊戲進行時且為當前玩家回合時顯示)
+        # 繪製游標
         if not self.game_over and not self.paused and (not self.vs_computer or self.current_player == 1):
             cursor_x = self.board_x + self.cursor_x * self.grid_size
             cursor_y = self.board_y + self.cursor_y * self.grid_size
             cursor_rect = pygame.Rect(cursor_x, cursor_y, self.grid_size, self.grid_size)
-            
-            # 使用半透明矩形作為游標
-            cursor_surface = pygame.Surface((self.grid_size, self.grid_size), pygame.SRCALPHA)
-            cursor_surface.fill((255, 255, 0, 128))
-            screen.blit(cursor_surface, cursor_rect)
+            pygame.draw.rect(screen, self.YELLOW, cursor_rect, 5)
         
         # 繪製遊戲資訊
         font = pygame.font.Font(None, 36)
         
         # 顯示當前玩家
         if not self.game_over and not self.paused:
-            player_text = "輪到: " + ("X (玩家)" if self.current_player == 1 else "O (電腦)" if self.vs_computer else "O (玩家2)")
-            player_color = self.BLUE if self.current_player == 1 else self.RED
-            text = font.render(player_text, True, player_color)
-            screen.blit(text, (20, 20))
+            player_text = f"當前玩家: {'X (你)' if self.current_player == 1 else 'O (電腦)' if self.vs_computer else 'O (玩家2)'}"
+            player_surface = font.render(player_text, True, self.WHITE)
+            screen.blit(player_surface, (20, 20))
         
         # 顯示遊戲模式
         mode_text = "模式: " + ("VS 電腦" if self.vs_computer else "雙人對戰")
-        mode_text = font.render(mode_text, True, self.WHITE)
-        screen.blit(mode_text, (self.width - mode_text.get_width() - 20, 20))
+        mode_surface = font.render(mode_text, True, self.WHITE)
+        screen.blit(mode_surface, (self.width - mode_surface.get_width() - 20, 20))
         
         # 顯示控制提示
         hint_text = "按 Y 切換模式，A 選擇，方向鍵移動"
-        hint = font.render(hint_text, True, self.GRAY)
-        screen.blit(hint, (self.width // 2 - hint.get_width() // 2, self.height - 40))
+        hint_surface = font.render(hint_text, True, self.GRAY)
+        screen.blit(hint_surface, (self.width // 2 - hint_surface.get_width() // 2, self.height - 40))
         
         # 遊戲結束畫面
         if self.game_over:
             self.draw_game_over(screen)
-        
-        # 暫停畫面
         elif self.paused:
             self.draw_pause(screen)
     
@@ -375,12 +324,15 @@ class TicTacToeGame:
         font = pygame.font.Font(None, 72)
         
         if self.winner == 0:
-            result_text = "平局!"
+            result_text = "平局！"
             color = self.YELLOW
         else:
-            player = "X (玩家)" if self.winner == 1 else "O (電腦)" if self.vs_computer else "O (玩家2)"
-            result_text = f"{player} 獲勝!"
-            color = self.BLUE if self.winner == 1 else self.RED
+            if self.winner == 1:
+                result_text = "X 獲勝！"
+                color = self.RED
+            else:
+                result_text = "O 獲勝！" + (" (電腦贏了)" if self.vs_computer else " (玩家2贏了)")
+                color = self.BLUE
         
         text = font.render(result_text, True, color)
         screen.blit(text, (self.width // 2 - text.get_width() // 2, self.height // 2 - 50))
@@ -398,71 +350,45 @@ class TicTacToeGame:
         font = pygame.font.Font(None, 72)
         text = font.render("暫停", True, self.YELLOW)
         screen.blit(text, (self.width // 2 - text.get_width() // 2, self.height // 2 - 50))
-        
-        font = pygame.font.Font(None, 36)
-        continue_text = font.render("按 Start 繼續", True, self.WHITE)
-        screen.blit(continue_text, (self.width // 2 - continue_text.get_width() // 2, self.height // 2 + 20))
+
     
     def cleanup(self):
         """清理遊戲資源"""
-        # 目前無需特殊清理，但保留此方法以便未來擴充
         pass
 
 # 若獨立執行此腳本，用於測試
 if __name__ == "__main__":
     try:
-        # 初始化 pygame
         pygame.init()
-        
-        # 設置視窗
-        screen_width = 800
-        screen_height = 600
-        screen = pygame.display.set_mode((screen_width, screen_height))
+        screen = pygame.display.set_mode((800, 600))
         pygame.display.set_caption("井字遊戲測試")
         
-        # 建立遊戲實例
-        game = TicTacToeGame(screen_width, screen_height)
+        game = TicTacToeGame(800, 600)
+        clock = pygame.time.Clock()
         
-        # 模擬控制器輸入的鍵盤映射
-        key_mapping = {
-            pygame.K_UP: "up_pressed",
-            pygame.K_DOWN: "down_pressed",
-            pygame.K_LEFT: "left_pressed",
-            pygame.K_RIGHT: "right_pressed",
-            pygame.K_a: "a_pressed",
-            pygame.K_y: "y_pressed",
-            pygame.K_RETURN: "start_pressed"
-        }
-        
-        # 遊戲主迴圈
         running = True
         while running:
-            # 處理事件
-            controller_input = {key: False for key in key_mapping.values()}
-            
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
             
-            # 獲取當前按下的按鍵狀態
             keys = pygame.key.get_pressed()
-            for key, input_name in key_mapping.items():
-                if keys[key]:
-                    controller_input[input_name] = True
+            controller_input = {
+                "up_pressed": keys[pygame.K_UP],
+                "down_pressed": keys[pygame.K_DOWN],
+                "left_pressed": keys[pygame.K_LEFT],
+                "right_pressed": keys[pygame.K_RIGHT],
+                "a_pressed": keys[pygame.K_a],
+                "y_pressed": keys[pygame.K_y],
+                "start_pressed": keys[pygame.K_RETURN]
+            }
             
-            # 更新遊戲
             game.update(controller_input)
-            
-            # 渲染
             game.render(screen)
             pygame.display.flip()
-            
-            # 控制幀率
-            pygame.time.Clock().tick(30)
+            clock.tick(30)
         
-        # 退出 pygame
         pygame.quit()
-    
     except Exception as e:
         print(f"遊戲執行錯誤: {e}")
         pygame.quit()

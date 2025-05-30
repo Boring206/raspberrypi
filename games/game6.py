@@ -192,7 +192,11 @@ class SimpleMazeGame:
                         
                         # 播放通關音效
                         if self.buzzer:
-                            self.buzzer.play_win_melody()
+                            # 增強通關音效序列
+                            victory_notes = [523, 659, 784, 1047, 1319]  # C大調音階向上
+                            for note in victory_notes:
+                                self.buzzer.play_tone(frequency=note, duration=0.2)
+                                time.sleep(0.1)
                         
                         # 生成新的更複雜迷宮
                         self.generate_maze()
@@ -236,6 +240,9 @@ class SimpleMazeGame:
                     pygame.draw.rect(screen, self.WALL_COLOR, rect)
                 else:
                     pygame.draw.rect(screen, self.PATH_COLOR, rect)
+                    
+                # 添加格線效果
+                pygame.draw.rect(screen, self.BLACK, rect, 1)
         
         # 繪製入口和出口
         entrance_rect = pygame.Rect(
@@ -348,11 +355,14 @@ if __name__ == "__main__":
             pygame.K_LEFT: "left_pressed",
             pygame.K_RIGHT: "right_pressed",
             pygame.K_a: "a_pressed",
+            pygame.K_y: "y_pressed",
             pygame.K_RETURN: "start_pressed"
         }
         
         # 遊戲主迴圈
         running = True
+        clock = pygame.time.Clock()
+        
         while running:
             # 處理事件
             controller_input = {key: False for key in key_mapping.values()}
@@ -360,6 +370,9 @@ if __name__ == "__main__":
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
             
             # 獲取當前按下的按鍵狀態
             keys = pygame.key.get_pressed()
@@ -375,11 +388,10 @@ if __name__ == "__main__":
             pygame.display.flip()
             
             # 控制幀率
-            pygame.time.Clock().tick(60)
-        
-        # 退出 pygame
-        pygame.quit()
-    
+            clock.tick(30)
+
     except Exception as e:
-        print(f"遊戲執行錯誤: {e}")
+        print(f"遊戲執行過程中發生錯誤: {e}")
+    finally:
         pygame.quit()
+        print("簡易迷宮遊戲測試結束")

@@ -67,29 +67,45 @@ sudo pip3 install -r requirements.txt
 請確保所有硬體元件依照以下列表連接至樹莓派的 GPIO 引腳。系統使用 BCM 編號模式。
 
 ### 蜂鳴器 (buzzer.py):
-* BUZZER_PIN: GPIO 18
+* BUZZER_PIN: GPIO 18(Pin 12)
+ Raspberry Pi         無源蜂鳴器模組
+┌─────────────┐      ┌─────────────┐
+│ GPIO18 (12) ──────►│ SIG         │
+│ GND (6)     ──────►│ GND         │
+│ 5V (2)      ──────►│ VCC         │
+└─────────────┘      └─────────────┘
 
 ### 矩陣鍵盤 (matrix_keypad.py):
-* 列 (Rows): GPIO 6, 13, 19, 26
-* 行 (Columns): GPIO 12, 16, 20, 21
+* 列 (Rows): GPIO 6, 13, 19, 26(1,2,3,4)
+* 行 (Columns): GPIO 12, 16, 20, 21(5,6,7,8)
 
 ### SPI TFT 螢幕 (screen_menu.py):
-使用 SPI0 介面:
-* MOSI: GPIO 10 (實體引腳 Pin 19)
-* SCLK: GPIO 11 (實體引腳 Pin 23)
-* CS (Chip Select / 片選): GPIO 8 (實體引腳 Pin 24, CE0) - 對應 SPI_DEVICE = 0
-* SPI_DC (Data/Command / 資料/指令選擇): GPIO 25(Pin 22)
-* SPI_RST (Reset / 重置): GPIO 24(Pin 18)
-* SPI_LED (Backlight Control / 背光控制): GPIO 27 (13)
+* VCC      → 3.3V (Pin 1 或 Pin 17)
+* GND      → GND (Pin 6, 9, 14, 20, 25, 30, 34, 39)
+* CS       → GPIO 8 (Pin 24) - SPI CE0
+* RESET    → GPIO 24 (Pin 18)
+* DC       → GPIO 25 (Pin 22)
+* MOSI     → GPIO 10 (Pin 19) - SPI MOSI
+* SCK      → GPIO 11 (Pin 23) - SPI SCLK
+* LED      → GPIO 27 (Pin 13) - 背光控制
+* MISO     → GPIO 9 (Pin 21) - SPI MISO (通常不用)
+
 
 ### 交通號誌燈 LED (traffic_light.py, main.py):
-* 紅燈 LED: GPIO 4
-* 黃燈 LED: GPIO 3
-* 綠燈 LED: GPIO 2
+* 紅燈 LED: GPIO 4(Pin 7)
+* 黃燈 LED: GPIO 3(Pin 5)
+* 綠燈 LED: GPIO 2(Pin 3)
+* GND LED: GND( Pin 6、Pin 9)
 
 ### 電源按鈕 (power_button.py):
 * 按鈕輸入: GPIO 22 (另一端接地，程式使用內部上拉電阻)
+按鈕腳位 → 樹莓派腳位
+一端      → GPIO 22 (Pin 15)
+另一端    → 3.3V (Pin 1 或 Pin 17)
 
+程式使用下拉電阻：
+- 按下時：HIGH (3.3V)
+- 放開時：LOW (0V)
 ### 重要接線提示：
 
 * 所有 GPIO 接線都應在樹莓派 **未通電** 的情況下進行。

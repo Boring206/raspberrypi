@@ -314,65 +314,128 @@ class TetrisLikeGame:
         self.level += 1
         self.drop_interval = max(0.1, 1.0 - 0.05 * (self.level - 1))
         
+        # 增強音效系統
         if self.buzzer:
-            self.buzzer.play_tone("level_up")
+            # 播放等級提升音效序列
+            frequencies = [523, 659, 784, 1047]  # C5, E5, G5, C6
+            for freq in frequencies:
+                self.buzzer.play_tone(frequency=freq, duration=0.15)
+                time.sleep(0.05)
     
+    def clear_lines(self, lines_to_clear):
+        """清除滿行，增強視覺和音效效果"""
+        if not lines_to_clear:
+            return
+        
+        # 閃爍效果
+        for flash in range(3):
+            for row in lines_to_clear:
+                for col in range(self.grid_width):
+                    self.grid[row][col] = 9  # 特殊標記
+            time.sleep(0.1)
+            
+            for row in lines_to_clear:
+                for col in range(self.grid_width):
+                    self.grid[row][col] = 0
+            time.sleep(0.1)
+        
+        # 移除行並添加新行
+        for row in sorted(lines_to_clear, reverse=True):
+            del self.grid[row]
+            self.grid.insert(0, [0] * self.grid_width)
+        
+        # 更新分數和音效
+        lines_count = len(lines_to_clear)
+        base_score = [0, 100, 300, 500, 800][min(lines_count, 4)]
+        self.score += base_score * self.level
+        self.lines_cleared += lines_count
+        
+        # 音效回饋
+        if self.buzzer:
+            if lines_count == 4:  # Tetris
+                self.buzzer.play_tetris_fanfare()
+            elif lines_count >= 2:
+                self.buzzer.play_multi_line_clear()
+            else:
+                self.buzzer.play_single_line_clear()
+        
+        # 等級檢查
+        if self.lines_cleared >= self.level * 10:
+            self.level_up()
+
     def update(self, controller_input=None):
-        """
-        更新遊戲狀態
-        
-        參數:
-            controller_input: 來自控制器的輸入字典
-        
-        返回:
-            包含遊戲狀態的字典
-        """
+        """更新遊戲狀態，增強輸入處理"""
         if self.game_over or self.paused:
-            # 處理遊戲結束或暫停狀態下的輸入
             if controller_input and controller_input.get("start_pressed"):
                 if self.game_over:
                     self.reset_game()
                 else:
                     self.paused = False
-            
-            return {"game_over": self.game_over, "score": self.score, "paused": self.paused}
+            return {"game_over": self.game_over, "level": self.level, "paused": self.paused}
         
-        # 當前時間
         current_time = time.time()
         
-        # 處理玩家輸入
-        if controller_input and current_time - self.last_input_time >= self.input_delay:
-            self.last_input_time = current_time
+        # 處理輸入
+        if controller_input:
+            # 移動控制（防止過快輸入）
+            if current_time - self.last_input_time > 0.1:
+                moved = False
+                
+                if controller_input.get("left_pressed"):
+                    if self.move_piece(-1, 0):
+                        moved = True
+                elif controller_input.get("right_pressed"):
+                    if self.move_piece(1, 0):
+                        moved = True
+                elif controller_input.get("down_pressed"):
+                    if self.move_piece(0, 1):
+                        moved = True
+                        self.score += 1  # 軟降分數
+                
+                if moved:
+                    self.last_input_time = current_time
+                    if self.buzzer:
+                        self.buzzer.play_tone(frequency=400, duration=0.05)
             
-            # 水平移動
-            if controller_input.get("left_pressed"):
-                self.move_left()
-            elif controller_input.get("right_pressed"):
-                self.move_right()
+            # 旋轉控制
+            if controller_input.get("up_pressed") and current_time - self.last_rotate_time > 0.2:
+                if self.rotate_piece():
+                    self.last_rotate_time = current_time
+                    if self.buzzer:
+                        self.buzzer.play_tone(frequency=600, duration=0.1)
             
-            # 旋轉
-            if controller_input.get("up_pressed"):
-                self.rotate()
-            
-            # 加速下落
-            self.fast_drop = controller_input.get("down_pressed")
-            
-            # 快速落下
-            if controller_input.get("a_pressed"):
-                self.hard_drop()
+            # 硬降控制
+            if controller_input.get("a_pressed") and current_time - self.last_hard_drop_time > 0.3:
+                drop_distance = self.hard_drop_piece()
+                if drop_distance > 0:
+                    self.score += drop_distance * 2
+                    self.last_hard_drop_time = current_time
+                    if self.buzzer:
+                        self.buzzer.play_hard_drop()
             
             # 暫停控制
             if controller_input.get("start_pressed"):
                 self.paused = not self.paused
-                return {"game_over": self.game_over, "score": self.score, "paused": self.paused}
+                return {"game_over": self.game_over, "level": self.level, "paused": self.paused}
         
-        # 方塊自動下落
-        drop_interval = self.drop_interval * (0.2 if self.fast_drop else 1.0)
-        if current_time - self.last_drop_time >= drop_interval:
+        # 自動下降邏輯
+        if current_time - self.last_drop_time >= self.drop_interval:
+            if not self.move_piece(0, 1):
+                self.lock_piece()
+                lines_to_clear = self.check_for_lines()
+                if lines_to_clear:
+                    self.clear_lines(lines_to_clear)
+                
+                self.spawn_new_piece()
+                
+                if self.check_collision():
+                    self.game_over = True
+                    if self.buzzer:
+                        self.buzzer.play_game_over_melody()
+            
             self.last_drop_time = current_time
-            self.move_down()
         
-        return {"game_over": self.game_over, "score": self.score}
+        return {"game_over": self.game_over, "level": self.level, "score": self.score}
     
     def render(self, screen):
         """

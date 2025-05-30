@@ -272,37 +272,46 @@ class SpaceInvadersGame:
             
             return {"game_over": self.game_over, "score": self.score, "paused": self.paused}
         
+        current_time = time.time()
+        
         # 處理輸入
         if controller_input:
-            # 移動控制
+            # 移動控制（增強響應性）
             if controller_input.get("left_pressed"):
                 self.move_player("left")
+                if self.buzzer and current_time - getattr(self, 'last_move_sound', 0) > 0.1:
+                    self.buzzer.play_tone(frequency=300, duration=0.05)
+                    self.last_move_sound = current_time
+                    
             if controller_input.get("right_pressed"):
                 self.move_player("right")
+                if self.buzzer and current_time - getattr(self, 'last_move_sound', 0) > 0.1:
+                    self.buzzer.play_tone(frequency=300, duration=0.05)
+                    self.last_move_sound = current_time
             
-            # 射擊控制
+            # 射擊控制（防止過於頻繁）
             if controller_input.get("a_pressed"):
-                self.shoot()
+                if current_time - self.last_shot_time >= self.shot_cooldown:
+                    self.shoot()
+                    if self.buzzer:
+                        self.buzzer.play_tone(frequency=800, duration=0.1)
             
             # 暫停控制
             if controller_input.get("start_pressed"):
                 self.paused = not self.paused
                 return {"game_over": self.game_over, "score": self.score, "paused": self.paused}
         
-        # 敵人射擊
-        self.enemy_shoot()
-        
-        # 移動子彈
-        self.move_bullets()
-        
-        # 移動敵人
-        self.move_enemies()
-        
-        # 檢查碰撞
+        # 更新遊戲邏輯
+        self.update_bullets()
+        self.update_aliens()
+        self.update_alien_bullets()
         self.check_collisions()
         
-        # 檢查波次完成
-        self.check_wave_complete()
+        # 檢查勝利條件
+        if not self.aliens:
+            self.spawn_new_wave()
+            if self.buzzer:
+                self.buzzer.play_victory_fanfare()
         
         return {"game_over": self.game_over, "score": self.score}
     

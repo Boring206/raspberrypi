@@ -98,6 +98,11 @@ class WhacAMoleGame:
         # 用於控制輸入頻率
         self.last_input_time = time.time()
         self.input_delay = 0.2  # 秒
+        
+        # 連擊系統
+        self.combo = 0
+        self.last_hit_time = 0
+        self.hits = 0
     
     def spawn_mole(self):
         """隨機生成一個地鼠"""
@@ -127,37 +132,44 @@ class WhacAMoleGame:
                     self.moles[i] = False
                     self.misses += 1  # 未打中算一次失誤
                     
-                    # 播放音效
+                    # 增強音效回饋
                     if self.buzzer:
-                        self.buzzer.play_tone("navigate")
+                        # 地鼠逃跑音效
+                        self.buzzer.play_tone(frequency=200, duration=0.3)
     
     def hit_mole(self, position_idx):
-        """嘗試打地鼠"""
+        """擊中地鼠，增強反饋效果"""
         if 0 <= position_idx < len(self.moles) and self.moles[position_idx]:
-            # 打中地鼠
             self.moles[position_idx] = False
             self.score += 10
+            self.hits += 1
             
-            # 播放打中音效
+            # 連擊系統
+            current_time = time.time()
+            if current_time - self.last_hit_time < 1.0:  # 1秒內連擊
+                self.combo += 1
+                combo_bonus = self.combo * 5
+                self.score += combo_bonus
+            else:
+                self.combo = 1
+            
+            self.last_hit_time = current_time
+            
+            # 增強音效反饋
             if self.buzzer:
-                self.buzzer.play_tone("score")
-            
-            # 隨著分數增加，增加難度
-            if self.score % 50 == 0:
-                self.mole_show_time_max = max(0.8, self.mole_show_time_max * 0.9)
-                self.mole_show_time_min = max(0.5, self.mole_show_time_min * 0.9)
-                self.mole_spawn_interval = max(0.5, self.mole_spawn_interval * 0.9)
-                
-                # 播放等級提升音效
-                if self.buzzer:
-                    self.buzzer.play_tone("level_up")
+                if self.combo > 5:
+                    # 高連擊音效
+                    self.buzzer.play_tone(frequency=1200, duration=0.2)
+                elif self.combo > 3:
+                    # 中連擊音效
+                    self.buzzer.play_tone(frequency=1000, duration=0.2)
+                else:
+                    # 普通擊中音效
+                    base_freq = 800 + (self.combo * 50)
+                    self.buzzer.play_tone(frequency=base_freq, duration=0.15)
             
             return True
-        else:
-            # 未打中
-            if self.buzzer:
-                self.buzzer.play_tone("error")
-            return False
+        return False
     
     def update(self, controller_input=None):
         """
